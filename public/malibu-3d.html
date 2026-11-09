@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Malibu 2 — Black 3D 360°</title>
+  <title>Chevrolet Malibu 2 Premier — Black 3D 360°</title>
   <style>
     :root {
       --bg-1: #2b3038;
@@ -62,6 +62,7 @@
       position: fixed; inset: 0; display: grid; place-items: center; background: var(--bg-2);
       color: var(--muted); letter-spacing: .3em; font-size: 12px; text-transform: uppercase; transition: opacity .6s;
     }
+    @media (max-width: 1100px) { .hint { display: none; } }
     @media (max-width: 720px) {
       .title { top: 16px; left: 16px; right: 16px; }
       .specs { display: none; }
@@ -85,15 +86,16 @@
   <div class="hud">
     <div class="title">
       <div>
-        <h1><b>Malibu</b> 2</h1>
-        <p>Mosaic Black Metallic · 360° Interactive</p>
+        <h1><b>Malibu 2</b> Premier</h1>
+        <p>Chevrolet · Mosaic Black Metallic · 360° Interactive</p>
       </div>
       <a class="badge" href="../index.html">← Portfolio</a>
     </div>
     <div class="specs">
       <div class="spec">Length<span>4 923 mm</span></div>
       <div class="spec">Wheelbase<span>2 829 mm</span></div>
-      <div class="spec">Wheels<span>18″ alloy</span></div>
+      <div class="spec">Engine<span>2.0 Turbo</span></div>
+      <div class="spec">Wheels<span>19″ polished alloy</span></div>
     </div>
     <div class="bar" id="bar">
       <button id="btnRotate" class="on">360° Spin</button>
@@ -415,6 +417,8 @@
             if (Math.abs(x - (-1.0)) < 0.006) return M.PIANO;
             return x > rearGlassLimit(S, y) ? M.GLASS : M.PAINT;
           }
+          if (u > 0.66 && x > -0.80 && x < 0.08) return M.GLASS;   // Premier panoramic sunroof
+          if (u > 0.63 && x > -0.82 && x < 0.10) return M.PIANO;   // sunroof frame
           return M.PAINT;
         } else {                             // rear window zone
           if (side) return x > rearGlassLimit(S, y) ? M.GLASS : M.PAINT;
@@ -677,6 +681,25 @@
       inner.position.set(XMIN + 0.02, 0.31, 0.56 * s);
       car.add(tip, inner);
     }
+    // Chrome model / trim lettering on the trunk lid
+    {
+      const badge = (text, az, width) => {
+        const tex = canvasTex(512, 96, (g, w, h) => {
+          g.fillStyle = '#fff'; g.font = '600 64px "Segoe UI", Arial, sans-serif';
+          g.textAlign = 'center'; g.textBaseline = 'middle';
+          g.letterSpacing = '10px';
+          g.fillText(text, w / 2, h / 2 + 4);
+        });
+        const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, alphaMap: tex, transparent: true, metalness: 1, roughness: 0.12, envMapIntensity: 2 });
+        const m = new THREE.Mesh(new THREE.PlaneGeometry(width, width * 96 / 512), mat);
+        const t = Math.pow(1 - Math.pow(Math.abs(az) / HALF_W, 3.1), 1 / 3.1);
+        m.rotation.y = -Math.PI / 2;
+        m.position.set(-1.85 - t * (-1.85 - XMIN) - 0.012, 0.86, az);
+        car.add(m);
+      };
+      badge('MALIBU', -0.42, 0.24);
+      badge('PREMIER', 0.42, 0.24);
+    }
     // Number plates (Uzbekistan format)
     function plateTex() {
       return canvasTex(1040, 224, (g, w, h) => {
@@ -719,7 +742,7 @@
     tread.wrapS = tread.wrapT = THREE.RepeatWrapping;
     tread.repeat.set(60, 1);
     const rubber = new THREE.MeshStandardMaterial({ color: 0x141516, roughness: 0.88, metalness: 0, bumpMap: tread, bumpScale: 2, side: THREE.DoubleSide });
-    const rimFace = new THREE.MeshPhysicalMaterial({ color: 0xd4d8de, metalness: 1, roughness: 0.32, clearcoat: 0.6, clearcoatRoughness: 0.1, envMapIntensity: 2.4 });
+    const rimFace = new THREE.MeshPhysicalMaterial({ color: 0xdde1e6, metalness: 1, roughness: 0.16, clearcoat: 1, clearcoatRoughness: 0.1, envMapIntensity: 2.4 });
     const rimDark = new THREE.MeshStandardMaterial({ color: 0x2a2d32, metalness: 0.9, roughness: 0.35 });
     const disc = new THREE.MeshStandardMaterial({ color: 0x777b80, metalness: 1, roughness: 0.42 });
     const caliperMat = new THREE.MeshPhysicalMaterial({ color: 0x2b2e33, metalness: 0.5, roughness: 0.3, clearcoat: 0.8 });
@@ -727,9 +750,9 @@
     function buildWheel() {
       const g = new THREE.Group();
       const prof = [
-        [0.232, -0.104], [0.26, -0.113], [0.295, -0.117], [0.322, -0.113], [0.337, -0.101],
+        [0.245, -0.104], [0.27, -0.113], [0.30, -0.117], [0.325, -0.113], [0.337, -0.101],
         [0.344, -0.082], [0.346, -0.045], [0.346, 0.045], [0.344, 0.082], [0.337, 0.101],
-        [0.322, 0.113], [0.295, 0.117], [0.26, 0.113], [0.232, 0.104]
+        [0.325, 0.113], [0.30, 0.117], [0.27, 0.113], [0.245, 0.104]
       ].map(p => new THREE.Vector2(p[0], p[1]));
       const tg = new THREE.LatheGeometry(prof, 120);
       tg.rotateX(Math.PI / 2);
@@ -737,21 +760,21 @@
       tire.castShadow = true;
       g.add(tire);
 
-      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.229, 0.229, 0.21, 64, 1, true), rimDark);
+      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.242, 0.242, 0.21, 64, 1, true), rimDark);
       barrel.rotation.x = Math.PI / 2;
       barrel.material.side = THREE.DoubleSide;
       g.add(barrel);
-      const lip = new THREE.Mesh(new THREE.TorusGeometry(0.226, 0.008, 12, 96), rimFace);
+      const lip = new THREE.Mesh(new THREE.TorusGeometry(0.239, 0.008, 12, 96), rimFace);
       lip.position.z = 0.095;
       g.add(lip);
 
       // 5 double-spoke face
       const shape = new THREE.Shape();
-      shape.absarc(0, 0, 0.222, 0, Math.PI * 2, false);
+      shape.absarc(0, 0, 0.235, 0, Math.PI * 2, false);
       for (let k = 0; k < 10; k++) {
         const a = k * Math.PI / 5 + Math.PI / 10;
         const wide = k % 2 === 0;
-        const ro = 0.198, ri = wide ? 0.088 : 0.135;
+        const ro = 0.211, ri = wide ? 0.092 : 0.142;
         const so = wide ? 0.25 : 0.055, si = wide ? 0.14 : 0.025;
         const hole = new THREE.Path();
         const N = 10;
@@ -769,7 +792,7 @@
       g.add(face);
 
       // spoke depth: a dish connecting face to barrel
-      const dish = new THREE.Mesh(new THREE.CylinderGeometry(0.10, 0.215, 0.07, 48, 1, true), rimDark);
+      const dish = new THREE.Mesh(new THREE.CylinderGeometry(0.10, 0.228, 0.07, 48, 1, true), rimDark);
       dish.rotation.x = -Math.PI / 2; dish.position.z = 0.03;
       g.add(dish);
 

@@ -1,0 +1,927 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Malibu 2 — Black 3D 360°</title>
+  <style>
+    :root {
+      --bg-1: #2b3038;
+      --bg-2: #0a0c0f;
+      --fg: #eef1f5;
+      --muted: #9aa3ae;
+      --accent: #d8b46a;
+      --glass: rgba(18, 21, 26, 0.62);
+      --line: rgba(255, 255, 255, 0.12);
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; overflow: hidden; }
+    body {
+      background: radial-gradient(ellipse at 50% 38%, var(--bg-1) 0%, #161a20 45%, var(--bg-2) 100%);
+      color: var(--fg);
+      font-family: "Segoe UI", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    canvas { display: block; touch-action: none; cursor: grab; }
+    canvas:active { cursor: grabbing; }
+
+    .hud { position: fixed; inset: 0; pointer-events: none; }
+    .title {
+      position: absolute; top: 22px; left: 28px; right: 28px;
+      display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;
+    }
+    .title h1 { margin: 0; font-size: clamp(22px, 3.4vw, 38px); font-weight: 300; letter-spacing: 0.14em; text-transform: uppercase; }
+    .title h1 b { font-weight: 700; }
+    .title p { margin: 6px 0 0; color: var(--muted); font-size: 13px; letter-spacing: 0.18em; text-transform: uppercase; }
+    .badge {
+      pointer-events: auto; text-decoration: none; color: var(--fg);
+      border: 1px solid var(--line); background: var(--glass); backdrop-filter: blur(10px);
+      padding: 8px 14px; border-radius: 999px; font-size: 13px; white-space: nowrap;
+    }
+    .specs {
+      position: absolute; left: 28px; bottom: 96px; display: grid; gap: 10px;
+    }
+    .spec { font-size: 12px; color: var(--muted); letter-spacing: 0.12em; text-transform: uppercase; }
+    .spec span { display: block; color: var(--fg); font-size: 20px; letter-spacing: 0.02em; text-transform: none; font-weight: 300; }
+    .bar {
+      position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%);
+      display: flex; gap: 6px; flex-wrap: wrap; justify-content: center;
+      padding: 6px; border-radius: 16px; border: 1px solid var(--line);
+      background: var(--glass); backdrop-filter: blur(12px); pointer-events: auto;
+      width: max-content; max-width: calc(100vw - 32px);
+    }
+    .bar button {
+      font: inherit; font-size: 13px; color: var(--fg); background: transparent; border: 0;
+      padding: 9px 14px; border-radius: 11px; cursor: pointer; transition: background .2s;
+    }
+    .bar button:hover { background: rgba(255,255,255,0.08); }
+    .bar button.on { background: rgba(216,180,106,0.18); color: var(--accent); }
+    .bar .sep { width: 1px; background: var(--line); margin: 6px 2px; }
+    .hint { position: absolute; right: 28px; bottom: 34px; color: var(--muted); font-size: 12px; letter-spacing: .08em; }
+    #loader {
+      position: fixed; inset: 0; display: grid; place-items: center; background: var(--bg-2);
+      color: var(--muted); letter-spacing: .3em; font-size: 12px; text-transform: uppercase; transition: opacity .6s;
+    }
+    @media (max-width: 720px) {
+      .title { top: 16px; left: 16px; right: 16px; }
+      .specs { display: none; }
+      .hint { display: none; }
+      .bar { bottom: 16px; }
+      .bar button { padding: 8px 10px; font-size: 12px; }
+    }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="loader">Building model…</div>
+
+  <div class="hud">
+    <div class="title">
+      <div>
+        <h1><b>Malibu</b> 2</h1>
+        <p>Mosaic Black Metallic · 360° Interactive</p>
+      </div>
+      <a class="badge" href="../index.html">← Portfolio</a>
+    </div>
+    <div class="specs">
+      <div class="spec">Length<span>4 923 mm</span></div>
+      <div class="spec">Wheelbase<span>2 829 mm</span></div>
+      <div class="spec">Wheels<span>18″ alloy</span></div>
+    </div>
+    <div class="bar" id="bar">
+      <button id="btnRotate" class="on">360° Spin</button>
+      <button id="btnLights" class="on">Lights</button>
+      <div class="sep"></div>
+      <button data-view="front">Front</button>
+      <button data-view="side">Side</button>
+      <button data-view="rear">Rear</button>
+      <button data-view="top">Top</button>
+      <button data-view="hero">3/4</button>
+    </div>
+    <div class="hint">Drag to rotate · Scroll / pinch to zoom</div>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    
+    // ------------------------------------------------------------------
+    // Renderer / scene
+    // ------------------------------------------------------------------
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.05;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    document.body.prepend(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    // Dark studio with soft-box panels: gives a black car crisp, readable highlights
+    function studioEnvironment() {
+      const env = new THREE.Scene();
+      const room = new THREE.Mesh(new THREE.BoxGeometry(40, 16, 40), new THREE.MeshBasicMaterial({ color: 0x15171b, side: THREE.BackSide }));
+      room.position.y = 7.5;
+      env.add(room);
+      const floorE = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.MeshBasicMaterial({ color: 0x24272c }));
+      floorE.rotation.x = -Math.PI / 2; floorE.position.y = -0.4;
+      env.add(floorE);
+      const panel = (w, h, x, y, z, k, tint = 0xffffff) => {
+        const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h),
+          new THREE.MeshBasicMaterial({ color: new THREE.Color(tint).multiplyScalar(k), side: THREE.DoubleSide }));
+        m.position.set(x, y, z); m.lookAt(0, 0.8, 0);
+        env.add(m);
+      };
+      panel(14, 3.2, 0, 12, 0, 7);              // overhead soft box
+      panel(10, 1.0, 0, 11.5, 5, 4);
+      panel(10, 1.0, 0, 11.5, -5, 4);
+      panel(1.2, 7, 13, 4, 7, 5);               // vertical strips
+      panel(1.2, 7, -13, 4, -7, 5);
+      panel(1.2, 7, -13, 4, 7, 3, 0xcfe0ff);
+      panel(1.2, 7, 13, 4, -7, 3, 0xcfe0ff);
+      panel(9, 0.8, 16, 3, 0, 3);               // horizon strips
+      panel(9, 0.8, -16, 3, 0, 3);
+      panel(9, 0.8, 0, 2.5, 16, 2.5);
+      panel(9, 0.8, 0, 2.5, -16, 2.5);
+      return env;
+    }
+    scene.environment = pmrem.fromScene(studioEnvironment(), 0.02).texture;
+
+    const camera = new THREE.PerspectiveCamera(32, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(6.2, 2.1, 5.4);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.set(0, 0.62, 0);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.06;
+    controls.minDistance = 3.6;
+    controls.maxDistance = 14;
+    controls.maxPolarAngle = Math.PI * 0.495;
+    controls.autoRotate = true;
+    controls.autoRotateSpeed = 1.1;
+    controls.enablePan = false;
+
+    // Lights (environment does most of the work; these add shape + shadows)
+    scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x0b0c0e, 0.25));
+    const key = new THREE.DirectionalLight(0xffffff, 1.5);
+    key.position.set(2.5, 9, 3.5);
+    key.castShadow = true;
+    key.shadow.mapSize.set(2048, 2048);
+    key.shadow.camera.left = -4; key.shadow.camera.right = 4;
+    key.shadow.camera.top = 4; key.shadow.camera.bottom = -4;
+    key.shadow.camera.near = 1; key.shadow.camera.far = 20;
+    key.shadow.bias = -0.0004;
+    key.shadow.radius = 6;
+    scene.add(key);
+    const rim = new THREE.DirectionalLight(0xbfd4ff, 1.2);
+    rim.position.set(-6, 3, -5);
+    scene.add(rim);
+
+    // ------------------------------------------------------------------
+    // Helpers
+    // ------------------------------------------------------------------
+    const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+    const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+
+    // Monotone cubic (Fritsch–Carlson) interpolation through key points
+    function curve(keys) {
+      const n = keys.length, xs = keys.map(k => k[0]), ys = keys.map(k => k[1]);
+      const d = [], m = new Array(n);
+      for (let i = 0; i < n - 1; i++) d.push((ys[i + 1] - ys[i]) / (xs[i + 1] - xs[i]));
+      m[0] = d[0]; m[n - 1] = d[n - 2];
+      for (let i = 1; i < n - 1; i++) m[i] = d[i - 1] * d[i] <= 0 ? 0 : (d[i - 1] + d[i]) / 2;
+      for (let i = 0; i < n - 1; i++) {
+        if (d[i] === 0) { m[i] = m[i + 1] = 0; continue; }
+        const a = m[i] / d[i], b = m[i + 1] / d[i], s = a * a + b * b;
+        if (s > 9) { const t = 3 / Math.sqrt(s); m[i] = t * a * d[i]; m[i + 1] = t * b * d[i]; }
+      }
+      return x => {
+        if (x <= xs[0]) return ys[0];
+        if (x >= xs[n - 1]) return ys[n - 1];
+        let i = 0; while (x > xs[i + 1]) i++;
+        const h = xs[i + 1] - xs[i], t = (x - xs[i]) / h, t2 = t * t, t3 = t2 * t;
+        return (2 * t3 - 3 * t2 + 1) * ys[i] + (t3 - 2 * t2 + t) * h * m[i] +
+               (-2 * t3 + 3 * t2) * ys[i + 1] + (t3 - t2) * h * m[i + 1];
+      };
+    }
+
+    function canvasTex(w, h, draw, srgb = true) {
+      const c = document.createElement('canvas'); c.width = w; c.height = h;
+      draw(c.getContext('2d'), w, h);
+      const t = new THREE.CanvasTexture(c);
+      if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+      t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+      return t;
+    }
+
+    // ------------------------------------------------------------------
+    // Car dimensions (metres) — 9th-gen Malibu proportions
+    // x = length (front is +x), y = up, z = width
+    // ------------------------------------------------------------------
+    const XMIN = -2.465, XMAX = 2.458;
+    const XF = 1.455, XR = -1.374;   // axle positions (2.829 m wheelbase)
+    const WY = 0.345;                 // wheel centre height
+    const RA = 0.398;                 // wheel arch radius
+    const HALF_W = 0.927;
+    const TRACK = 0.80;               // wheel centre plane offset
+
+    // Side profile: top line (roof / hood / trunk)
+    const TOP = curve([
+      [-2.465, 0.82], [-2.44, 0.95], [-2.36, 1.025], [-2.15, 1.055], [-1.85, 1.07],
+      [-1.55, 1.10], [-1.25, 1.245], [-0.95, 1.375], [-0.55, 1.452], [-0.15, 1.44],
+      [0.18, 1.375], [0.55, 1.18], [0.96, 0.99], [1.40, 0.935], [1.90, 0.875],
+      [2.25, 0.84], [2.41, 0.81], [2.458, 0.77]
+    ]);
+    // Beltline (bottom of the side windows), rising towards the rear
+    const BELT = curve([[-2.5, 1.07], [-1.6, 1.07], [-0.9, 1.035], [0.96, 0.968], [2.5, 0.95]]);
+    // Bottom line (sills / bumpers)
+    const BOTTOM = curve([
+      [-2.465, 0.44], [-2.42, 0.33], [-2.2, 0.26], [-1.9, 0.235], [-0.9, 0.20],
+      [0.9, 0.20], [1.9, 0.225], [2.25, 0.245], [2.42, 0.29], [2.458, 0.37]
+    ]);
+
+    function halfWidth(x) {
+      let t = 0;
+      if (x > 1.70) t = (x - 1.70) / (XMAX - 1.70);
+      else if (x < -1.85) t = (-1.85 - x) / (-1.85 - XMIN);
+      t = clamp(t, 0, 1);
+      return HALF_W * Math.pow(1 - Math.pow(t, 3.1), 1 / 3.1);
+    }
+
+    function section(x) {
+      const h = TOP(x);
+      let yb = BOTTOM(x);
+      for (const xw of [XF, XR]) {
+        const dx = x - xw;
+        if (Math.abs(dx) < RA) yb = Math.max(yb, WY + Math.sqrt(RA * RA - dx * dx));
+      }
+      const ys = Math.min(h - 0.035, BELT(x));
+      const w = halfWidth(x);
+      const d = h - ys;
+      const k = smooth(0.03, 0.34, d);
+      const wc = w * (1 - 0.27 * k);
+      return { x, h, yb, ys, w, d, wc };
+    }
+
+    // Upper body (greenhouse / hood / deck) cubic Bézier, u: 0 = shoulder, 1 = centreline
+    function upper(S, u) {
+      const a = 1 - u;
+      const b0 = a * a * a, b1 = 3 * a * a * u, b2 = 3 * a * u * u, b3 = u * u * u;
+      const z = b0 * S.w + b1 * S.wc + b2 * S.wc * 0.55;
+      const y = b0 * S.ys + b1 * (S.ys + 0.8 * S.d) + (b2 + b3) * S.h;
+      return { z, y };
+    }
+    function upperZAtY(S, yT) {
+      let lo = 0, hi = 0.999;
+      for (let i = 0; i < 40; i++) { const m = (lo + hi) / 2; if (upper(S, m).y < yT) lo = m; else hi = m; }
+      return upper(S, (lo + hi) / 2).z;
+    }
+    function sideZ(S, y) {
+      const wb = S.w * 0.935, rb = Math.min(0.07, (S.ys - S.yb) * 0.35, wb * 0.5);
+      const s = clamp((y - S.yb - rb) / (S.ys - S.yb - rb), 0, 1);
+      return wb + (S.w - wb) * Math.sin(s * Math.PI / 2) + crease(S, y);
+    }
+    function crease(S, y) {
+      // subtle sculpted shoulder line along the doors
+      return 0.009 * Math.exp(-Math.pow((y - (S.ys - 0.10)) / 0.022, 2)) * clamp(S.w / 0.6, 0, 1);
+    }
+
+    // Half cross-section: bottom centre -> sill -> side -> shoulder -> top centre
+    const NA = 6, NB = 8, NC = 40, ND = 56;
+    const SEG = { A: 0, B: 1, C: 2, D: 3 };
+    function halfRing(S) {
+      const pts = [];
+      const { w, yb, ys } = S;
+      const wb = w * 0.935;
+      const rb = Math.max(1e-4, Math.min(0.07, (ys - yb) * 0.35, wb * 0.5));
+      for (let i = 0; i < NA; i++) pts.push({ z: (wb - rb) * i / (NA - 1), y: yb, seg: 0, u: 0 });
+      for (let i = 1; i <= NB; i++) {
+        const a = -Math.PI / 2 + (i / NB) * Math.PI / 2;
+        pts.push({ z: wb - rb + rb * Math.cos(a), y: yb + rb + rb * Math.sin(a), seg: 1, u: 0 });
+      }
+      for (let i = 1; i <= NC; i++) {
+        const s = i / NC, y = yb + rb + s * (ys - yb - rb);
+        pts.push({ z: wb + (w - wb) * Math.sin(s * Math.PI / 2) + crease(S, y), y, seg: 2, u: 0 });
+      }
+      for (let i = 1; i <= ND; i++) {
+        const u = i / ND, p = upper(S, u);
+        pts.push({ z: p.z, y: p.y, seg: 3, u });
+      }
+      return pts;
+    }
+
+    // ------------------------------------------------------------------
+    // Material zones on the body shell
+    // ------------------------------------------------------------------
+    const M = { PAINT: 0, GLASS: 1, PIANO: 2, HEAD: 3, TAIL: 4, GRILLE: 5, CHROME: 6, DRL: 7, PLASTIC: 8, GAP: 9 };
+    const XS = (() => {
+      const xs = [];
+      const WF0 = 1.70, WR0 = -1.85;
+      for (let x = WR0; x <= WF0; x += 0.011) xs.push(x);
+      const invT = r => Math.pow(1 - Math.pow(r, 3.1), 1 / 3.1);
+      for (const [x0, x1] of [[WF0, XMAX], [WR0, XMIN]]) {
+        for (let i = 0; i <= 60; i++) xs.push(x0 + (x1 - x0) * i / 60);
+        for (let i = 0; i <= 110; i++) xs.push(x0 + (x1 - x0) * invT(i / 110));
+      }
+      xs.sort((a, b) => a - b);
+      return xs.filter((x, i) => i === 0 || x - xs[i - 1] > 4e-4);
+    })();
+    const NSEC = XS.length;
+    const rearGlassLimit = (S, y) => -1.30 + 0.36 * clamp((y - S.ys) / Math.max(S.d, 1e-3), 0, 1);
+
+    // Lamps, grilles and fascia chrome. Kept in sync with FEATURE_GLSL below, which
+    // re-evaluates the same rules per pixel so their edges stay crisp.
+    function featureZone(x, y, az, seg) {
+      if (x > 1.95) {
+        const s = smooth(0.40, 0.90, az);
+        const lo = 0.635 + 0.16 * s, hi = 0.775 + 0.075 * s;
+        if (az > 0.40 && az < 0.93 && y > lo && y < hi && (seg === 2 || (seg === 3 && az > 0.5))) {
+          return y > hi - 0.016 ? M.DRL : M.HEAD;
+        }
+        if (seg <= 2 && x > 2.2) {
+          const lower = y > 0.335 && y < 0.56 && az < 0.62 - (0.56 - y) * 0.45;
+          if ((az < 0.47 && y > 0.664 && y < 0.684) || (lower && Math.abs(y - 0.465) < 0.008)) return M.CHROME;
+          if ((az < 0.42 && y > 0.615 && y < 0.735) || lower) return M.GRILLE;
+        }
+      }
+      if (x < -2.02) {
+        const side = az > 0.80;
+        if (az > 0.33 && y > 0.89 + 0.03 * smooth(0.72, 0.92, az) && y < 1.005 && seg >= 2 && (!side || x < -2.22)) return M.TAIL;
+        if (seg <= 2 && x < -2.3) {
+          if (az < 0.33 && y > 0.935 && y < 0.955) return M.CHROME;
+          if (az > 0.62 && y > 0.47 && y < 0.50) return M.TAIL;
+        }
+      }
+      return -1;
+    }
+    const FEATURE_GLSL = `
+      int featureZone(float x, float y, float az) {
+        if (x > 1.95) {
+          float s = smoothstep(0.40, 0.90, az);
+          float lo = 0.635 + 0.16 * s, hi = 0.775 + 0.075 * s;
+          if (az > 0.40 && az < 0.93 && y > lo && y < hi) return y > hi - 0.016 ? ${M.DRL} : ${M.HEAD};
+          if (x > 2.2) {
+            bool lower = y > 0.335 && y < 0.56 && az < 0.62 - (0.56 - y) * 0.45;
+            if ((az < 0.47 && y > 0.664 && y < 0.684) || (lower && abs(y - 0.465) < 0.008)) return ${M.CHROME};
+            if ((az < 0.42 && y > 0.615 && y < 0.735) || lower) return ${M.GRILLE};
+          }
+        }
+        if (x < -2.02) {
+          bool side = az > 0.80;
+          if (az > 0.33 && y > 0.89 + 0.03 * smoothstep(0.72, 0.92, az) && y < 1.005 && (!side || x < -2.22)) return ${M.TAIL};
+          if (x < -2.3) {
+            if (az < 0.33 && y > 0.935 && y < 0.955) return ${M.CHROME};
+            if (az > 0.62 && y > 0.47 && y < 0.50) return ${M.TAIL};
+          }
+        }
+        return -1;
+      }`;
+    function featureMaterial(mat, id) {
+      mat.polygonOffset = true;
+      mat.polygonOffsetFactor = -2;
+      mat.polygonOffsetUnits = -2;
+      mat.onBeforeCompile = sh => {
+        sh.vertexShader = 'varying vec3 vBP;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n  vBP = position;');
+        sh.fragmentShader = 'varying vec3 vBP;\n' + FEATURE_GLSL + '\n' + sh.fragmentShader.replace('void main() {',
+          'void main() {\n  if (featureZone(vBP.x, vBP.y, abs(vBP.z)) != ' + id + ') discard;');
+      };
+      mat.customProgramCacheKey = () => 'feature' + id;
+      return mat;
+    }
+
+    function zone(x, y, az, seg, u, S, x0, x1) {
+      const near = (_, b) => b >= x0 && b < x1;
+
+      // --- greenhouse
+      if (seg === 3 && y > S.ys + 0.03 && x <= 0.97 && x >= -1.56) {
+        const side = u < 0.44;
+        if (x > 0.18) {                      // windshield zone
+          if (side) return M.GLASS;
+          if (u < 0.56) return M.PAINT;      // A-pillar
+          return M.GLASS;
+        } else if (x >= -0.95) {             // roof zone
+          if (side) {
+            if (x > -0.17 && x < -0.05) return M.PIANO;   // B-pillar
+            if (Math.abs(x - (-1.0)) < 0.006) return M.PIANO;
+            return x > rearGlassLimit(S, y) ? M.GLASS : M.PAINT;
+          }
+          return M.PAINT;
+        } else {                             // rear window zone
+          if (side) return x > rearGlassLimit(S, y) ? M.GLASS : M.PAINT;
+          if (u < 0.58) return M.PAINT;      // C-pillar
+          return M.GLASS;
+        }
+      }
+
+      // --- fascia: base surface under the smooth-edged lamp/grille overlays
+      if (x > 2.2 && seg <= 2) {
+        if (az > 0.66 && az < 0.82 && y > 0.37 && y < 0.45) return M.PIANO;   // fog pockets
+        if (y < 0.315) return M.PLASTIC;
+      }
+      if (x < -2.3 && seg <= 2 && y < 0.43) return M.PLASTIC;                // diffuser
+
+      // --- panel gaps
+      if (seg >= 1 && (seg <= 2 || y < S.ys + 0.02)) {
+        const doorZone = y > 0.31 && y < S.ys + 0.01;
+        if (doorZone && (near(x, 0.935) || near(x, -0.10))) return M.GAP;
+        if (y > 0.745 && y < S.ys + 0.01 && near(x, -1.02)) return M.GAP;
+        if (x > -1.02 && x < 0.935 && Math.abs(y - 0.31) < 0.006) return M.GAP;
+      }
+      if (seg === 3) {
+        if (near(x, 1.0)) return M.GAP;                              // hood / cowl
+        if (x > 1.0 && x < 2.32 && Math.abs(u - 0.115) < 0.5 / ND) return M.GAP;   // hood / fender
+        if (near(x, -1.60) && u > 0.06) return M.GAP;                // trunk lid
+        if (x < -1.60 && x > -2.36 && Math.abs(u - 0.09) < 0.5 / ND) return M.GAP;
+      }
+      if (seg <= 1) return M.PLASTIC;   // underside
+      return M.PAINT;
+    }
+
+    // ------------------------------------------------------------------
+    // Build the body shell by lofting cross-sections along the car
+    // ------------------------------------------------------------------
+    function buildBody() {
+      const sections = [], rings = [];
+      for (let i = 0; i < NSEC; i++) {
+        const S = section(XS[i]);
+        sections.push(S);
+        rings.push(halfRing(S));
+      }
+      const H = rings[0].length;
+      const R = H * 2 - 2;
+      const pos = new Float32Array(NSEC * R * 3);
+      const uv = new Float32Array(NSEC * R * 2);
+      const meta = [];
+      for (let j = 0; j < R; j++) {
+        const right = j < H;
+        const k = right ? j : (2 * H - 2 - j);
+        meta.push({ k, sign: right ? 1 : -1 });
+      }
+      for (let i = 0; i < NSEC; i++) {
+        const S = sections[i];
+        for (let j = 0; j < R; j++) {
+          const p = rings[i][meta[j].k];
+          const o = (i * R + j) * 3;
+          pos[o] = S.x; pos[o + 1] = p.y; pos[o + 2] = p.z * meta[j].sign;
+          uv[(i * R + j) * 2] = i / (NSEC - 1);
+          uv[(i * R + j) * 2 + 1] = j / R;
+        }
+      }
+      const buckets = Array.from({ length: 10 }, () => []);
+      const overlays = Array.from({ length: 10 }, () => []);
+      for (let i = 0; i < NSEC - 1; i++) {
+        const S0 = sections[i], S1 = sections[i + 1];
+        const xc = (S0.x + S1.x) / 2;
+        const Sc = section(xc);
+        for (let j = 0; j < R; j++) {
+          const j1 = (j + 1) % R;
+          const pa = rings[i][meta[j].k], pb = rings[i][meta[j1].k];
+          const qa = rings[i + 1][meta[j].k], qb = rings[i + 1][meta[j1].k];
+          const y = (pa.y + pb.y + qa.y + qb.y) / 4;
+          const az = (pa.z + pb.z + qa.z + qb.z) / 4;
+          const seg = Math.max(pa.seg, pb.seg);
+          const u = (pa.u + pb.u) / 2;
+          const mat = zone(xc, y, az, seg, u, Sc, S0.x, S1.x);
+          const a = i * R + j, b = (i + 1) * R + j, c = (i + 1) * R + j1, d = i * R + j1;
+          buckets[mat].push(a, b, d, b, c, d);
+          // overlay coverage: any corner or the centre touching a feature (1-quad dilation)
+          const hit = new Set();
+          for (const [px, pp] of [[S0.x, pa], [S0.x, pb], [S1.x, qa], [S1.x, qb]]) {
+            const f = featureZone(px, pp.y, pp.z, pp.seg);
+            if (f >= 0) hit.add(f);
+          }
+          const fc = featureZone(xc, y, az, seg);
+          if (fc >= 0) hit.add(fc);
+          for (const f of hit) overlays[f].push(a, b, d, b, c, d);
+        }
+      }
+      const index = [];
+      const geo = new THREE.BufferGeometry();
+      let start = 0;
+      buckets.forEach((arr, m) => {
+        for (const v of arr) index.push(v);
+        if (arr.length) geo.addGroup(start, arr.length, m);
+        start += arr.length;
+      });
+      geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+      geo.setIndex(index);
+      geo.computeVertexNormals();
+      const features = [];
+      overlays.forEach((arr, m) => {
+        if (!arr.length) return;
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', geo.getAttribute('position'));
+        g.setAttribute('normal', geo.getAttribute('normal'));
+        g.setAttribute('uv', geo.getAttribute('uv'));
+        g.setIndex(arr);
+        features.push([m, g]);
+      });
+      return { geo, features };
+    }
+
+    // ------------------------------------------------------------------
+    // Materials
+    // ------------------------------------------------------------------
+    const flake = canvasTex(256, 256, (g, w, h) => {
+      const img = g.createImageData(w, h);
+      for (let i = 0; i < img.data.length; i += 4) {
+        img.data[i] = 128 + (Math.random() - 0.5) * 60;
+        img.data[i + 1] = 128 + (Math.random() - 0.5) * 60;
+        img.data[i + 2] = 255; img.data[i + 3] = 255;
+      }
+      g.putImageData(img, 0, 0);
+    }, false);
+    flake.wrapS = flake.wrapT = THREE.RepeatWrapping;
+    flake.repeat.set(220, 160);
+
+    const paint = new THREE.MeshPhysicalMaterial({
+      color: 0x060708, metalness: 0.55, roughness: 0.32,
+      clearcoat: 1, clearcoatRoughness: 0.025,
+      normalMap: flake, normalScale: new THREE.Vector2(0.06, 0.06),
+      envMapIntensity: 1.25
+    });
+    const glass = new THREE.MeshPhysicalMaterial({
+      color: 0x000000, metalness: 0.0, roughness: 0.03, clearcoat: 1, clearcoatRoughness: 0.0,
+      envMapIntensity: 1.0
+    });
+    const piano = new THREE.MeshPhysicalMaterial({ color: 0x020202, metalness: 0.2, roughness: 0.12, clearcoat: 1, envMapIntensity: 1.2 });
+    const headMat = new THREE.MeshPhysicalMaterial({
+      color: 0xb9c2cc, metalness: 1, roughness: 0.12, clearcoat: 1, clearcoatRoughness: 0,
+      emissive: 0xfff4e0, emissiveIntensity: 0
+    });
+    const tailMat = new THREE.MeshPhysicalMaterial({
+      color: 0x3a0306, metalness: 0.2, roughness: 0.15, clearcoat: 1, clearcoatRoughness: 0,
+      emissive: 0xff1018, emissiveIntensity: 0
+    });
+    const grilleMat = new THREE.MeshStandardMaterial({ color: 0x0b0c0e, metalness: 0.6, roughness: 0.45 });
+    const chrome = new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 1, roughness: 0.06, envMapIntensity: 1.4 });
+    const drlMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xe8f2ff, emissiveIntensity: 0, roughness: 0.2 });
+    const plastic = new THREE.MeshStandardMaterial({ color: 0x0c0d0f, metalness: 0, roughness: 0.75 });
+    const gap = new THREE.MeshStandardMaterial({ color: 0x000000, roughness: 0.9 });
+    const bodyMats = [paint, glass, piano, headMat, tailMat, grilleMat, chrome, drlMat, plastic, gap];
+
+    const car = new THREE.Group();
+    scene.add(car);
+
+    const built = buildBody();
+    const body = new THREE.Mesh(built.geo, bodyMats);
+    body.castShadow = true; body.receiveShadow = true;
+    car.add(body);
+    const featureMats = {
+      [M.HEAD]: headMat, [M.DRL]: drlMat, [M.TAIL]: tailMat, [M.GRILLE]: grilleMat, [M.CHROME]: chrome.clone()
+    };
+    for (const [m, g] of built.features) {
+      const mesh = new THREE.Mesh(g, featureMaterial(featureMats[m], m));
+      mesh.renderOrder = 1;
+      car.add(mesh);
+    }
+
+    // ------------------------------------------------------------------
+    // Chrome window surround (DLO)
+    // ------------------------------------------------------------------
+    function tube(points, r, mat) {
+      const c = new THREE.CatmullRomCurve3(points, false, 'centripetal');
+      const g = new THREE.TubeGeometry(c, Math.max(64, points.length * 3), r, 8, false);
+      for (const s of [1, -1]) {
+        const m = new THREE.Mesh(g, mat);
+        m.scale.z = s; m.castShadow = true;
+        car.add(m);
+      }
+    }
+    {
+      const belt = [];
+      for (let x = 0.90; x >= -1.30; x -= 0.03) {
+        const S = section(x), y = S.ys + 0.028;
+        belt.push(new THREE.Vector3(x, y, upperZAtY(S, y) + 0.004));
+      }
+      tube(belt, 0.0065, chrome);
+
+      const top = [];
+      for (let x = 0.88; x >= -0.95; x -= 0.03) {
+        const S = section(x), p = upper(S, 0.44);
+        if (p.y < S.ys + 0.03) continue;
+        top.push(new THREE.Vector3(x, p.y + 0.002, p.z + 0.004));
+      }
+      for (let v = 0.72; v >= 0.05; v -= 0.05) {
+        let x = -1.30 + 0.36 * v, S = section(x);
+        const y = S.ys + v * S.d;
+        top.push(new THREE.Vector3(x, y, upperZAtY(S, y) + 0.004));
+      }
+      tube(top, 0.006, chrome);
+    }
+
+    // ------------------------------------------------------------------
+    // Mirrors, handles, fin, exhausts, plates
+    // ------------------------------------------------------------------
+    for (const s of [1, -1]) {
+      const g = new THREE.Group();
+      const S = section(0.80);
+      const housing = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 20), paint);
+      housing.scale.set(0.085, 0.062, 0.115);
+      housing.position.set(0, 0, 0.11);
+      housing.castShadow = true;
+      const glassM = new THREE.Mesh(new THREE.CircleGeometry(1, 32), new THREE.MeshStandardMaterial({ color: 0x9fa7b0, metalness: 1, roughness: 0.02 }));
+      glassM.scale.set(0.055, 0.105, 1);
+      glassM.rotation.y = -Math.PI / 2;
+      glassM.position.set(-0.07, 0, 0.11);
+      const repeater = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.008, 0.09), new THREE.MeshPhysicalMaterial({
+        color: 0x553a10, roughness: 0.15, clearcoat: 1, emissive: 0xff9a1a, emissiveIntensity: 0.4 }));
+      repeater.position.set(0.035, -0.045, 0.13);
+      const stalk = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.035, 0.08), piano);
+      stalk.position.set(0.02, -0.03, 0.03);
+      g.add(housing, glassM, repeater, stalk);
+      g.position.set(0.80, S.ys + 0.065, upperZAtY(S, S.ys + 0.04) - 0.02);
+      g.scale.z = s; g.position.z *= s;
+      car.add(g);
+
+      for (const hx of [0.30, -0.62]) {
+        const Sh = section(hx), y = Sh.ys - 0.075;
+        const handle = new THREE.Mesh(new THREE.CapsuleGeometry(0.013, 0.12, 6, 16), chrome);
+        handle.rotation.z = Math.PI / 2;
+        handle.scale.z = 0.6;
+        handle.position.set(hx, y, s * (sideZ(Sh, y) + 0.004));
+        car.add(handle);
+      }
+    }
+    // Shark-fin antenna
+    {
+      const shape = new THREE.Shape();
+      shape.moveTo(0, 0); shape.lineTo(0.17, 0); shape.quadraticCurveTo(0.12, 0.05, 0.02, 0.065); shape.quadraticCurveTo(0, 0.04, 0, 0);
+      const g = new THREE.ExtrudeGeometry(shape, { depth: 0.03, bevelEnabled: true, bevelThickness: 0.012, bevelSize: 0.008, bevelSegments: 4 });
+      g.translate(-0.17, 0, -0.015);
+      const fin = new THREE.Mesh(g, paint);
+      fin.position.set(-0.80, TOP(-0.80) - 0.006, 0);
+      fin.castShadow = true;
+      car.add(fin);
+    }
+    // Exhaust tips
+    for (const s of [1, -1]) {
+      const g = new THREE.CylinderGeometry(0.042, 0.046, 0.12, 32, 1, true);
+      g.rotateZ(Math.PI / 2);
+      const tip = new THREE.Mesh(g, chrome);
+      tip.scale.z = 0.62;
+      tip.position.set(XMIN + 0.07, 0.31, 0.56 * s);
+      const inner = new THREE.Mesh(new THREE.CircleGeometry(0.038, 32), gap);
+      inner.rotation.y = -Math.PI / 2; inner.scale.y = 1; inner.scale.x = 0.62;
+      inner.position.set(XMIN + 0.02, 0.31, 0.56 * s);
+      car.add(tip, inner);
+    }
+    // Number plates (Uzbekistan format)
+    function plateTex() {
+      return canvasTex(1040, 224, (g, w, h) => {
+        g.fillStyle = '#f5f6f2'; g.fillRect(0, 0, w, h);
+        g.strokeStyle = '#111'; g.lineWidth = 10; g.strokeRect(6, 6, w - 12, h - 12);
+        g.fillStyle = '#111'; g.font = 'bold 150px "Arial Narrow", Arial, sans-serif'; g.textBaseline = 'middle';
+        g.fillText('01', 40, h / 2 + 6);
+        g.fillRect(205, 14, 8, h - 28);
+        g.fillText('A 777 AA', 240, h / 2 + 6);
+        // flag
+        const fx = 900, fy = 40, fw = 100, fh = 66;
+        g.fillStyle = '#1eb2e6'; g.fillRect(fx, fy, fw, fh / 3);
+        g.fillStyle = '#ffffff'; g.fillRect(fx, fy + fh / 3, fw, fh / 3);
+        g.fillStyle = '#1eb53a'; g.fillRect(fx, fy + 2 * fh / 3, fw, fh / 3);
+        g.fillStyle = '#ce1126'; g.fillRect(fx, fy + fh / 3 - 2, fw, 4); g.fillRect(fx, fy + 2 * fh / 3 - 2, fw, 4);
+        g.fillStyle = '#111'; g.font = 'bold 54px Arial, sans-serif'; g.fillText('UZ', fx + 18, 160);
+      });
+    }
+    {
+      const pm = new THREE.MeshStandardMaterial({ map: plateTex(), roughness: 0.4, metalness: 0.1 });
+      const geo = new THREE.PlaneGeometry(0.52, 0.112);
+      const rear = new THREE.Mesh(geo, pm);
+      rear.rotation.y = -Math.PI / 2; rear.position.set(XMIN - 0.004, 0.70, 0);
+      const front = new THREE.Mesh(geo, pm);
+      front.rotation.y = Math.PI / 2; front.position.set(XMAX + 0.006, 0.45, 0);
+      car.add(rear, front);
+    }
+
+    // ------------------------------------------------------------------
+    // Wheels
+    // ------------------------------------------------------------------
+    const tread = canvasTex(64, 512, (g, w, h) => {
+      g.fillStyle = '#fff'; g.fillRect(0, 0, w, h);
+      g.fillStyle = '#000';
+      // circumferential grooves: tread spans roughly v 0.35..0.65 of the profile
+      for (const v of [0.42, 0.48, 0.52, 0.58]) g.fillRect(0, v * h - 4, w, 8);
+      g.fillStyle = '#333';
+      for (let y = 0.36 * h; y < 0.64 * h; y += 3) g.fillRect(w * 0.45, y, 3, 2);
+    }, false);
+    tread.wrapS = tread.wrapT = THREE.RepeatWrapping;
+    tread.repeat.set(60, 1);
+    const rubber = new THREE.MeshStandardMaterial({ color: 0x141516, roughness: 0.88, metalness: 0, bumpMap: tread, bumpScale: 2, side: THREE.DoubleSide });
+    const rimFace = new THREE.MeshPhysicalMaterial({ color: 0xd4d8de, metalness: 1, roughness: 0.32, clearcoat: 0.6, clearcoatRoughness: 0.1, envMapIntensity: 2.4 });
+    const rimDark = new THREE.MeshStandardMaterial({ color: 0x2a2d32, metalness: 0.9, roughness: 0.35 });
+    const disc = new THREE.MeshStandardMaterial({ color: 0x777b80, metalness: 1, roughness: 0.42 });
+    const caliperMat = new THREE.MeshPhysicalMaterial({ color: 0x2b2e33, metalness: 0.5, roughness: 0.3, clearcoat: 0.8 });
+
+    function buildWheel() {
+      const g = new THREE.Group();
+      const prof = [
+        [0.232, -0.104], [0.26, -0.113], [0.295, -0.117], [0.322, -0.113], [0.337, -0.101],
+        [0.344, -0.082], [0.346, -0.045], [0.346, 0.045], [0.344, 0.082], [0.337, 0.101],
+        [0.322, 0.113], [0.295, 0.117], [0.26, 0.113], [0.232, 0.104]
+      ].map(p => new THREE.Vector2(p[0], p[1]));
+      const tg = new THREE.LatheGeometry(prof, 120);
+      tg.rotateX(Math.PI / 2);
+      const tire = new THREE.Mesh(tg, rubber);
+      tire.castShadow = true;
+      g.add(tire);
+
+      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.229, 0.229, 0.21, 64, 1, true), rimDark);
+      barrel.rotation.x = Math.PI / 2;
+      barrel.material.side = THREE.DoubleSide;
+      g.add(barrel);
+      const lip = new THREE.Mesh(new THREE.TorusGeometry(0.226, 0.008, 12, 96), rimFace);
+      lip.position.z = 0.095;
+      g.add(lip);
+
+      // 5 double-spoke face
+      const shape = new THREE.Shape();
+      shape.absarc(0, 0, 0.222, 0, Math.PI * 2, false);
+      for (let k = 0; k < 10; k++) {
+        const a = k * Math.PI / 5 + Math.PI / 10;
+        const wide = k % 2 === 0;
+        const ro = 0.198, ri = wide ? 0.088 : 0.135;
+        const so = wide ? 0.25 : 0.055, si = wide ? 0.14 : 0.025;
+        const hole = new THREE.Path();
+        const N = 10;
+        for (let i = 0; i <= N; i++) { const t = a - so + (2 * so) * i / N; hole.lineTo ? 0 : 0; i === 0 ? hole.moveTo(ro * Math.cos(t), ro * Math.sin(t)) : hole.lineTo(ro * Math.cos(t), ro * Math.sin(t)); }
+        for (let i = 0; i <= N; i++) { const t = a + si - (2 * si) * i / N; hole.lineTo(ri * Math.cos(t), ri * Math.sin(t)); }
+        hole.closePath();
+        shape.holes.push(hole);
+      }
+      const fg = new THREE.ExtrudeGeometry(shape, {
+        depth: 0.022, curveSegments: 72, bevelEnabled: true, bevelThickness: 0.009, bevelSize: 0.006, bevelSegments: 3
+      });
+      const face = new THREE.Mesh(fg, [rimFace, rimDark]);
+      face.position.z = 0.058;
+      face.castShadow = true;
+      g.add(face);
+
+      // spoke depth: a dish connecting face to barrel
+      const dish = new THREE.Mesh(new THREE.CylinderGeometry(0.10, 0.215, 0.07, 48, 1, true), rimDark);
+      dish.rotation.x = -Math.PI / 2; dish.position.z = 0.03;
+      g.add(dish);
+
+      const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.058, 0.062, 0.02, 48), rimFace);
+      cap.rotation.x = Math.PI / 2; cap.position.z = 0.092;
+      const emblem = new THREE.Mesh(new THREE.CircleGeometry(0.036, 40), piano);
+      emblem.position.z = 0.1025;
+      g.add(cap, emblem);
+      for (let i = 0; i < 5; i++) {
+        const a = i * Math.PI * 2 / 5;
+        const nut = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.01, 0.02, 6), chrome);
+        nut.rotation.x = Math.PI / 2;
+        nut.position.set(Math.cos(a) * 0.073, Math.sin(a) * 0.073, 0.088);
+        g.add(nut);
+      }
+
+      const rotor = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.026, 64), disc);
+      rotor.rotation.x = Math.PI / 2; rotor.position.z = -0.02;
+      const hat = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.05, 32), rimDark);
+      hat.rotation.x = Math.PI / 2; hat.position.z = 0.0;
+      const caliper = new THREE.Mesh(new THREE.TorusGeometry(0.15, 0.03, 12, 24, 0.9), caliperMat);
+      caliper.scale.z = 1.6; caliper.position.z = -0.02; caliper.rotation.z = Math.PI * 0.32;
+      g.add(rotor, hat, caliper);
+      return g;
+    }
+
+    const wellMat = new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.95, side: THREE.DoubleSide });
+    for (const xw of [XF, XR]) {
+      for (const s of [1, -1]) {
+        const w = buildWheel();
+        w.position.set(xw, WY, TRACK * s);
+        if (s < 0) w.rotation.y = Math.PI;
+        car.add(w);
+      }
+      const wg = new THREE.CylinderGeometry(RA - 0.006, RA - 0.006, 2 * HALF_W - 0.04, 48, 1, true, Math.PI / 2 - 0.35, Math.PI + 0.7);
+      wg.rotateX(Math.PI / 2);
+      const well = new THREE.Mesh(wg, wellMat);
+      well.position.set(xw, WY, 0);
+      car.add(well);
+    }
+    {
+      const under = new THREE.Mesh(new THREE.BoxGeometry(4.25, 0.5, 1.2), wellMat);
+      under.position.set(0.02, 0.45, 0);
+      car.add(under);
+    }
+
+    // ------------------------------------------------------------------
+    // Headlight beams
+    // ------------------------------------------------------------------
+    const beams = [];
+    for (const s of [1, -1]) {
+      const sp = new THREE.SpotLight(0xfff3e0, 60, 0, 0.42, 0.7, 2);
+      sp.position.set(2.30, 0.72, 0.62 * s);
+      sp.target.position.set(9, 0, 0.9 * s);
+      car.add(sp, sp.target);
+      beams.push(sp);
+      const glow = new THREE.PointLight(0xff2020, 0.6, 1.6, 2);
+      glow.position.set(XMIN - 0.2, 0.95, 0.65 * s);
+      car.add(glow);
+      beams.push(glow);
+    }
+
+    // ------------------------------------------------------------------
+    // Floor + contact shadow
+    // ------------------------------------------------------------------
+    const fade = canvasTex(512, 512, (g, w, h) => {
+      const gr = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
+      gr.addColorStop(0, '#fff'); gr.addColorStop(0.45, '#ccc'); gr.addColorStop(1, '#000');
+      g.fillStyle = gr; g.fillRect(0, 0, w, h);
+    }, false);
+    const floor = new THREE.Mesh(
+      new THREE.CircleGeometry(16, 96),
+      new THREE.MeshPhysicalMaterial({ color: 0x0c0e11, roughness: 0.42, metalness: 0.0, clearcoat: 0.4, clearcoatRoughness: 0.35, alphaMap: fade, transparent: true })
+    );
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
+    scene.add(floor);
+
+    const ao = canvasTex(256, 256, (g, w, h) => {
+      const gr = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
+      gr.addColorStop(0, 'rgba(0,0,0,0.95)'); gr.addColorStop(0.55, 'rgba(0,0,0,0.7)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = gr; g.fillRect(0, 0, w, h);
+    });
+    const contact = new THREE.Mesh(new THREE.PlaneGeometry(5.6, 2.5), new THREE.MeshBasicMaterial({ map: ao, transparent: true, depthWrite: false }));
+    contact.rotation.x = -Math.PI / 2; contact.position.y = 0.002;
+    scene.add(contact);
+    // Ring light reflection on the floor
+    const ring = new THREE.Mesh(new THREE.RingGeometry(4.6, 4.64, 160), new THREE.MeshBasicMaterial({ color: 0x3a3f47, transparent: true, opacity: 0.6 }));
+    ring.rotation.x = -Math.PI / 2; ring.position.y = 0.003;
+    scene.add(ring);
+
+    // Centre the car on the turntable
+    car.position.x = -(XMIN + XMAX) / 2;
+
+    // ------------------------------------------------------------------
+    // UI
+    // ------------------------------------------------------------------
+    let lightsOn = true;
+    function setLights(on) {
+      lightsOn = on;
+      headMat.emissiveIntensity = on ? 0.12 : 0;
+      drlMat.emissiveIntensity = on ? 4 : 0;
+      tailMat.emissiveIntensity = on ? 1.4 : 0;
+      beams.forEach(b => b.visible = on);
+      document.getElementById('btnLights').classList.toggle('on', on);
+    }
+    setLights(true);
+    document.getElementById('btnLights').onclick = () => setLights(!lightsOn);
+    document.getElementById('btnRotate').onclick = (e) => {
+      controls.autoRotate = !controls.autoRotate;
+      e.currentTarget.classList.toggle('on', controls.autoRotate);
+    };
+
+    const views = {
+      hero: [6.2, 2.1, 5.4], front: [7.4, 1.1, 0.001], side: [0.001, 1.2, 8.2],
+      rear: [-7.4, 1.4, 0.001], top: [0.001, 9.5, 0.6]
+    };
+    let flight = null;
+    document.querySelectorAll('[data-view]').forEach(b => b.onclick = () => {
+      const to = new THREE.Vector3(...views[b.dataset.view]);
+      flight = { from: camera.position.clone(), to, t: 0 };
+      controls.autoRotate = false;
+      document.getElementById('btnRotate').classList.remove('on');
+    });
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    const clock = new THREE.Clock();
+    renderer.setAnimationLoop(() => {
+      const dt = clock.getDelta();
+      if (flight) {
+        flight.t = Math.min(1, flight.t + dt / 1.2);
+        const e = 1 - Math.pow(1 - flight.t, 3);
+        // travel on a sphere so the camera orbits rather than cutting through the car
+        const a = flight.from.clone().sub(controls.target), b = flight.to.clone().sub(controls.target);
+        const len = THREE.MathUtils.lerp(a.length(), b.length(), e);
+        const dir = a.normalize().lerp(b.normalize(), e).normalize();
+        camera.position.copy(controls.target).addScaledVector(dir, len);
+        if (flight.t >= 1) flight = null;
+      }
+      controls.update();
+      renderer.render(scene, camera);
+    });
+
+    const loader = document.getElementById('loader');
+    loader.style.opacity = 0;
+    setTimeout(() => loader.remove(), 700);
+    window.__ready = true;
+  </script>
+</body>
+</html>

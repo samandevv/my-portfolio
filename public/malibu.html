@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>Malibu 2 Premier</title>
+  <title>Garaj 360</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Michroma&family=Manrope:wght@300;400;600&display=swap">
@@ -22,6 +22,7 @@
       --ease: cubic-bezier(.77, 0, .18, 1);
     }
     * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
     html, body { height: 100%; margin: 0; overflow: hidden; overscroll-behavior: none; }
     body {
       background: radial-gradient(ellipse 80% 70% at 50% 45%, #1b2028 0%, #0c0f13 55%, var(--night) 100%), var(--night);
@@ -101,6 +102,66 @@
     .slide.active .copy > *:nth-child(4) { transition-delay: .24s; }
     .slide.active .copy > *:nth-child(5) { transition-delay: .32s; }
 
+    /* Sketchfab layer: the real model fills the stage; a shield above it catches swipes */
+    #sfLayer { position: fixed; inset: 0; z-index: 0; background: var(--night); }
+    #sfLayer iframe { width: 100%; height: 100%; border: 0; display: block; }
+    #shield { position: fixed; inset: 0; z-index: 1; display: none; }
+    body.sf #shield { display: block; }
+    body.sf.free #shield { display: none; }
+    body.sf #stage, body.sf .backword { display: none; }
+    .inline { display: flex; gap: 8px; }
+    .inline input { flex: 1; min-width: 0; }
+
+    /* garage panel */
+    .head-right { display: flex; align-items: center; gap: 18px; pointer-events: auto; }
+    .garage-btn {
+      font: 600 11px/1 var(--body); letter-spacing: .18em; text-transform: uppercase; color: var(--chrome);
+      background: rgba(18, 22, 27, .6); border: 1px solid var(--hairline); border-radius: 999px; padding: 10px 14px;
+      cursor: pointer; backdrop-filter: blur(10px);
+    }
+    .garage-btn:hover, .garage-btn[aria-expanded="true"] { border-color: var(--signal); color: var(--signal); }
+    .garage {
+      position: fixed; z-index: 8; top: calc(64px + env(safe-area-inset-top, 0px)); right: max(16px, env(safe-area-inset-right, 0px));
+      width: min(380px, calc(100vw - 32px)); max-height: calc(100% - 96px); overflow-y: auto;
+      display: grid; gap: 16px; padding: 20px; border-radius: 18px;
+      background: rgba(12, 15, 19, .92); border: 1px solid var(--hairline); backdrop-filter: blur(16px);
+      user-select: text; touch-action: auto;
+    }
+    .garage-head { display: flex; justify-content: space-between; align-items: center; }
+    .garage h3 { margin: 0; font: 400 15px/1.2 var(--display); letter-spacing: .08em; }
+    .close { background: none; border: 0; color: var(--steel); font-size: 26px; line-height: 1; cursor: pointer; padding: 0 4px; }
+    .presets { border: 0; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+    .presets legend { font-size: 11px; letter-spacing: .18em; text-transform: uppercase; color: var(--steel); margin-bottom: 8px; padding: 0; }
+    .chip {
+      font: 600 12px/1 var(--body); color: var(--chrome); background: transparent; border: 1px solid var(--hairline);
+      border-radius: 999px; padding: 9px 12px; cursor: pointer;
+    }
+    .chip:hover:not(:disabled) { border-color: var(--chrome); }
+    .chip[aria-pressed="true"] { background: var(--signal); border-color: var(--signal); color: var(--night); }
+    .chip:disabled { opacity: .4; cursor: default; }
+    .field { display: grid; gap: 6px; font-size: 12px; color: var(--steel); }
+    .field input {
+      font: 400 15px var(--body); color: var(--chrome); background: var(--asphalt); border: 1px solid var(--hairline);
+      border-radius: 10px; padding: 11px 12px;
+    }
+    .drop {
+      display: grid; gap: 6px; padding: 18px; border: 1px dashed rgba(232, 236, 241, .3); border-radius: 14px;
+      cursor: pointer; transition: border-color .2s, background .2s;
+    }
+    .drop:hover, .drop.over, body.dragging .drop { border-color: var(--signal); background: rgba(242, 163, 58, .06); }
+    .drop input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+    .drop b { font-size: 14px; }
+    .drop span { font-size: 12px; color: var(--steel); line-height: 1.5; }
+    .toggles { display: flex; flex-wrap: wrap; gap: 8px; }
+    .status { font-size: 12px; color: var(--steel); line-height: 1.5; max-width: none; }
+    .status.err { color: #ff8a7a; }
+    .note { font-size: 11px; color: var(--steel); letter-spacing: .04em; }
+    body.dragging::after {
+      content: "Faylni tashlang — .glb"; position: fixed; inset: 12px; z-index: 9; border: 2px dashed var(--signal); border-radius: 22px;
+      display: grid; place-items: center; font: 400 16px var(--display); letter-spacing: .14em; color: var(--signal);
+      background: rgba(7, 9, 12, .7); pointer-events: none;
+    }
+
     /* dots */
     nav.dots {
       position: fixed; z-index: 5; right: max(22px, env(safe-area-inset-right, 0px)); top: 50%; transform: translateY(-50%);
@@ -138,6 +199,8 @@
       p { font-size: 14px; }
       .figures dd { font-size: 18px; }
       nav.dots { right: max(10px, env(safe-area-inset-right, 0px)); gap: 10px; }
+      .counter { display: none; }
+      .garage { top: auto; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); max-height: 72%; }
       .backword { top: 30%; }
     }
     @media (prefers-reduced-motion: reduce) {
@@ -145,6 +208,7 @@
       .hint i { animation: none; }
     }
   </style>
+  <script src="https://static.sketchfab.com/api/sketchfab-viewer-1.12.1.js" async></script>
   <script type="importmap">
     {
       "imports": {
@@ -157,19 +221,24 @@
 <body>
   <div id="loader">MALIBU</div>
   <div class="backword" id="backword">MALIBU</div>
+  <div id="sfLayer" hidden><iframe id="sfFrame" title="3D model (Sketchfab)" allow="autoplay; fullscreen; xr-spatial-tracking" allowfullscreen></iframe></div>
+  <div id="shield"></div>
   <div id="stage" aria-label="Qora Chevrolet Malibu 2 Premier 3D modeli. Aylantirish uchun gorizontal suring."></div>
 
   <header>
-    <div class="brand">MALIBU <span>2</span></div>
-    <div class="counter"><b id="cur">01</b> / <span id="tot">07</span></div>
+    <div class="brand" id="brand">MALIBU <span>2</span></div>
+    <div class="head-right">
+      <button class="garage-btn" id="garageBtn" aria-expanded="false" aria-controls="garage">Mashina tanlash</button>
+      <div class="counter"><b id="cur">01</b> / <span id="tot">07</span></div>
+    </div>
   </header>
 
   <main id="track">
-    <section class="slide" data-side="left" data-word="MALIBU">
+    <section class="slide" data-side="left">
       <div class="copy">
-        <div class="eyebrow">Chevrolet · Premier</div>
-        <h1>Malibu 2</h1>
-        <p>Mosaic Black rangidagi biznes-sedan. Tinch salon, turbo motor va har burchakdan ko‘rinadigan aniq chiziqlar.</p>
+        <div class="eyebrow" id="hEyebrow">Chevrolet · Premier</div>
+        <h1 id="hTitle">Malibu 2</h1>
+        <p id="hLead">Mosaic Black rangidagi biznes-sedan. Tinch salon, turbo motor va har burchakdan ko‘rinadigan aniq chiziqlar.</p>
         <div class="row">
           <button class="btn" data-go="1">Tanishish</button>
           <button class="btn ghost" data-go="5">360° ko‘rish</button>
@@ -177,70 +246,93 @@
       </div>
     </section>
 
-    <section class="slide" data-side="left" data-word="SILUET">
+    <section class="slide" data-side="left">
       <div class="copy">
         <div class="eyebrow">01 · Dizayn</div>
-        <h2>Fastback siluet</h2>
-        <p>Tom chizig‘i old oynadan yukxona qopqog‘igacha bir tekis tushadi. Xrom deraza hoshiyasi va yon qirra mashinani pastroq, uzunroq ko‘rsatadi.</p>
-        <dl class="figures">
-          <div><dt>Uzunligi</dt><dd>4 923<small>mm</small></dd></div>
-          <div><dt>Balandligi</dt><dd>1 465<small>mm</small></dd></div>
-          <div><dt>Kengligi</dt><dd>1 854<small>mm</small></dd></div>
-          <div><dt>G‘ildirak bazasi</dt><dd>2 829<small>mm</small></dd></div>
-        </dl>
+        <h2 id="dTitle">Fastback siluet</h2>
+        <p id="dText">Tom chizig‘i old oynadan yukxona qopqog‘igacha bir tekis tushadi. Xrom deraza hoshiyasi va yon qirra mashinani pastroq, uzunroq ko‘rsatadi.</p>
+        <dl class="figures" id="dFig"></dl>
       </div>
     </section>
 
-    <section class="slide" data-side="right" data-word="LED">
+    <section class="slide" data-side="right">
       <div class="copy">
         <div class="eyebrow">02 · Old qism</div>
-        <h2>Nigoh va LED</h2>
-        <p>Ingichka faralar qanot tomon cho‘ziladi. Pastki havo olgichlarda diagonal LED kunduzgi chiroqlar yonadi, katta panjara esa gorizontal qovurg‘alardan iborat.</p>
-        <div class="row"><button class="btn ghost" id="lightsBtn" aria-pressed="true">Chiroqlar: yoniq</button></div>
+        <h2 id="fTitle">Nigoh va LED</h2>
+        <p id="fText">Ingichka faralar qanot tomon cho‘ziladi. Pastki havo olgichlarda diagonal LED kunduzgi chiroqlar yonadi, katta panjara esa gorizontal qovurg‘alardan iborat.</p>
+        <div class="row" id="lightsRow"><button class="btn ghost" id="lightsBtn" aria-pressed="true">Chiroqlar: yoniq</button></div>
       </div>
     </section>
 
-    <section class="slide" data-side="left" data-word="TURBO">
+    <section class="slide" data-side="left">
       <div class="copy">
         <div class="eyebrow">03 · Kuch</div>
-        <h2>2.0 Turbo</h2>
-        <p>To‘g‘ridan-to‘g‘ri purkashli turbo motor shahar tezligida ham, trassada quvib o‘tishda ham bir xil ishonch beradi.</p>
-        <dl class="figures">
-          <div><dt>Quvvat</dt><dd>250<small>o.k.</small></dd></div>
-          <div><dt>Moment</dt><dd>353<small>N·m</small></dd></div>
-          <div><dt>Disklar</dt><dd>19″</dd></div>
-          <div><dt>Yuritma</dt><dd>Old</dd></div>
-        </dl>
+        <h2 id="pTitle">2.0 Turbo</h2>
+        <p id="pText">To‘g‘ridan-to‘g‘ri purkashli turbo motor shahar tezligida ham, trassada quvib o‘tishda ham bir xil ishonch beradi.</p>
+        <dl class="figures" id="pFig"></dl>
       </div>
     </section>
 
-    <section class="slide" data-side="right" data-word="PREMIER">
+    <section class="slide" data-side="right">
       <div class="copy">
         <div class="eyebrow">04 · Orqa qism</div>
-        <h2>Ikki qismli fonarlar</h2>
-        <p>Stop-chiroqlar qanotdan yukxona qopqog‘iga o‘tadi. Qopqoqda MALIBU va PREMIER xrom yozuvlari, pastda qora diffuzor va ikkita chiqindi quvur.</p>
+        <h2 id="rTitle">Ikki qismli fonarlar</h2>
+        <p id="rText">Stop-chiroqlar qanotdan yukxona qopqog‘iga o‘tadi. Qopqoqda MALIBU va PREMIER xrom yozuvlari, pastda qora diffuzor va ikkita chiqindi quvur.</p>
       </div>
     </section>
 
-    <section class="slide" data-side="center" data-word="360°">
+    <section class="slide" data-side="center">
       <div class="copy">
         <div class="eyebrow">05 · 360°</div>
         <h2>O‘zingiz aylantiring</h2>
-        <p>Barmog‘ingiz yoki sichqoncha bilan mashinani chapga-o‘ngga suring. Keyingi bo‘limga o‘tish uchun yuqoriga suring.</p>
+        <p>Barmog‘ingiz yoki sichqoncha bilan mashinani chapga-o‘ngga suring.</p>
+        <button class="btn ghost" data-go="6">Keyingisi ↓</button>
       </div>
     </section>
 
-    <section class="slide" data-side="center" data-word="MALIBU">
+    <section class="slide" data-side="center">
       <div class="copy">
-        <div class="eyebrow">Malibu 2 Premier</div>
-        <h2>Qora. Sokin. Tez.</h2>
+        <div class="eyebrow" id="eEyebrow">Malibu 2 Premier</div>
+        <h2 id="eTitle">Qora. Sokin. Tez.</h2>
         <div class="row">
           <button class="btn" data-go="0">Boshiga qaytish</button>
-          <a class="btn ghost" href="malibu-3d.html">To‘liq 3D ko‘rinish</a>
+          <button class="btn ghost" data-open-garage>Boshqa mashina</button>
         </div>
       </div>
     </section>
   </main>
+
+  <aside class="garage" id="garage" hidden aria-label="Mashina tanlash">
+    <div class="garage-head">
+      <h3>Mashina tanlash</h3>
+      <button class="close" id="garageClose" aria-label="Yopish">×</button>
+    </div>
+    <fieldset class="presets" id="presets">
+      <legend>Matn va xususiyatlar</legend>
+    </fieldset>
+    <label class="field" id="customName" hidden>
+      <span>Mashina nomi</span>
+      <input id="nameInput" type="text" maxlength="40" placeholder="Masalan: Porsche 911 Turbo S">
+    </label>
+    <form class="field" id="sfForm">
+      <span>Sketchfab havolasi</span>
+      <div class="inline">
+        <input id="sfInput" type="url" placeholder="https://sketchfab.com/3d-models/...">
+        <button class="chip" type="submit">Ochish</button>
+      </div>
+    </form>
+    <label class="drop" id="drop" for="fileInput">
+      <input id="fileInput" type="file" accept=".glb,model/gltf-binary">
+      <b>3D modelni yuklang (.glb)</b>
+      <span>Faylni shu yerga tashlang yoki bosib tanlang. Sketchfab: Download 3D Model → glTF (.glb).</span>
+    </label>
+    <div class="toggles">
+      <button class="chip" id="flipBtn" disabled>Old/orqani almashtirish</button>
+      <button class="chip" id="paintBtn" disabled aria-pressed="false">Kuzovni qora qilish</button>
+      <button class="chip" id="builtinBtn" disabled>Ichki Malibu modeli</button>
+    </div>
+    <p class="status" id="status" role="status">Hozir ichki Malibu 2 modeli ko‘rsatilmoqda.</p>
+  </aside>
 
   <nav class="dots" id="dots" aria-label="Bo‘limlar"></nav>
   <div class="hint" id="hint"><i></i>Suring</div>
@@ -282,6 +374,105 @@
       { cam: [-5.2, 1.4, 6.0], look: [0, 0.55, 0], yaw: 0.0, shift: 0, lift: -0.14, turn: 0.06 }
     ];
 
+    // ---------------- car presets: copy + figures (figures are approximate) ----------------
+    const PRESETS = {
+      malibu: {
+        label: 'Malibu 2 Premier', brand: 'MALIBU <span>2</span>', length: 4.923,
+        words: ['MALIBU', 'SILUET', 'LED', 'TURBO', 'PREMIER', '360°', 'MALIBU'],
+        hEyebrow: 'Chevrolet · Premier', hTitle: 'Malibu 2',
+        hLead: 'Mosaic Black rangidagi biznes-sedan. Tinch salon, turbo motor va har burchakdan ko‘rinadigan aniq chiziqlar.',
+        dTitle: 'Fastback siluet',
+        dText: 'Tom chizig‘i old oynadan yukxona qopqog‘igacha bir tekis tushadi. Xrom deraza hoshiyasi va yon qirra mashinani pastroq, uzunroq ko‘rsatadi.',
+        dFig: [['Uzunligi', '4 923', 'mm'], ['Balandligi', '1 465', 'mm'], ['Kengligi', '1 854', 'mm'], ['G‘ildirak bazasi', '2 829', 'mm']],
+        fTitle: 'Nigoh va LED',
+        fText: 'Ingichka faralar qanot tomon cho‘ziladi. Pastki havo olgichlarda diagonal LED kunduzgi chiroqlar yonadi, katta panjara esa gorizontal qovurg‘alardan iborat.',
+        pTitle: '2.0 Turbo',
+        pText: 'To‘g‘ridan-to‘g‘ri purkashli turbo motor shahar tezligida ham, trassada quvib o‘tishda ham bir xil ishonch beradi.',
+        pFig: [['Quvvat', '250', 'o.k.'], ['Moment', '353', 'N·m'], ['Disklar', '19″', ''], ['Yuritma', 'Old', '']],
+        rTitle: 'Ikki qismli fonarlar',
+        rText: 'Stop-chiroqlar qanotdan yukxona qopqog‘iga o‘tadi. Qopqoqda MALIBU va PREMIER xrom yozuvlari, pastda qora diffuzor va ikkita chiqindi quvur.',
+        eTitle: 'Qora. Sokin. Tez.'
+      },
+      gls: {
+        label: 'Mercedes-AMG GLS 63', brand: 'AMG <span>GLS</span>', length: 5.22,
+        words: ['GLS 63', 'SUV', 'AMG', 'V8', '4MATIC+', '360°', 'AMG'],
+        hEyebrow: 'Mercedes-AMG · 4MATIC+', hTitle: 'GLS 63',
+        hLead: 'Yetti o‘rinli katta SUV, kapot ostida esa V8 biturbo. Hashamat va kuch bitta kuzovda.',
+        dTitle: 'Katta va bosiq',
+        dText: 'Uzun kapot, tik old qism va keng g‘ildirak arkalari. Mashina ham hashamatli, ham og‘ir vaznli ko‘rinadi.',
+        dFig: [['Uzunligi', '5 220', 'mm'], ['Balandligi', '1 838', 'mm'], ['Kengligi', '1 956', 'mm'], ['G‘ildirak bazasi', '3 135', 'mm']],
+        fTitle: 'Panamericana panjarasi',
+        fText: 'Vertikal qovurg‘ali AMG panjarasi, MULTIBEAM LED faralar va katta havo olgichlar.',
+        pTitle: '4.0 V8 Biturbo',
+        pText: 'Ikki turbinali V8 va 48 voltli EQ Boost tizimi. Og‘ir SUV sport mashinadek tezlashadi.',
+        pFig: [['Quvvat', '612', 'o.k.'], ['Moment', '850', 'N·m'], ['0–100', '4.2', 's'], ['Yuritma', '4MATIC+', '']],
+        rTitle: 'To‘rt quvur',
+        rText: 'AMG to‘rt quvurli chiqindi tizimi, keng orqa bamper va ingichka LED fonarlar.',
+        eTitle: 'Katta. Hashamatli. Shiddatli.'
+      },
+      m8: {
+        label: 'BMW M8 Competition', brand: 'BMW <span>M8</span>', length: 4.867,
+        words: ['M8', 'GRAN COUPE', 'M', 'V8', 'xDRIVE', '360°', 'M8'],
+        hEyebrow: 'BMW M · Competition', hTitle: 'M8',
+        hLead: 'Ikki eshikli gran turizmo: uzun kapot, past tom va 625 ot kuchi.',
+        dTitle: 'Kupe silueti',
+        dText: 'Past va keng kuzov, karbon tom, orqaga qiya tushgan tom chizig‘i.',
+        dFig: [['Uzunligi', '4 867', 'mm'], ['Balandligi', '1 362', 'mm'], ['Kengligi', '1 907', 'mm'], ['G‘ildirak bazasi', '2 827', 'mm']],
+        fTitle: 'Keng buyraklar',
+        fText: 'Bitta ramkadagi keng “buyrak” panjara, lazerli faralar va katta yon havo olgichlar.',
+        pTitle: '4.4 V8 M TwinPower',
+        pText: 'Ikki turbinali V8 va M xDrive to‘liq yuritma. Xohlasangiz, faqat orqa g‘ildirak rejimiga o‘tadi.',
+        pFig: [['Quvvat', '625', 'o.k.'], ['Moment', '750', 'N·m'], ['0–100', '3.2', 's'], ['Yuritma', 'M xDrive', '']],
+        rTitle: 'To‘rt quvurli M chiqindi',
+        rText: 'Karbon diffuzor, to‘rt quvur va ingichka L-shakl LED fonarlar.',
+        eTitle: 'Past. Keng. Tez.'
+      },
+      custom: {
+        label: 'Boshqa', brand: 'GARAJ <span>360</span>', length: null,
+        words: ['GARAJ', 'DIZAYN', 'OLD', 'KUCH', 'ORQA', '360°', 'GARAJ'],
+        hEyebrow: 'Sizning mashinangiz', hTitle: 'Mashina',
+        hLead: 'O‘zingiz yuklagan 3D model. Har bir svaypda mashinani yangi burchakdan ko‘rasiz.',
+        dTitle: 'Siluet', dText: 'Yon tomondan qarang: kuzov proporsiyalari, tom chizig‘i va g‘ildiraklar.',
+        dFig: [],
+        fTitle: 'Old qism', fText: 'Faralar, panjara va bamper yaqindan.',
+        pTitle: 'G‘ildiraklar', pText: 'Disklar, tormozlar va g‘ildirak arkalari.',
+        pFig: [],
+        rTitle: 'Orqa qism', rText: 'Fonarlar, diffuzor va chiqindi quvurlari.',
+        eTitle: 'Har burchakdan.'
+      }
+    };
+    let preset = PRESETS.malibu;
+    const $ = id => document.getElementById(id);
+    function fig(el, rows) {
+      el.innerHTML = '';
+      el.hidden = !rows.length;
+      for (const [dt, dd, unit] of rows) {
+        const d = document.createElement('div');
+        d.innerHTML = '<dt></dt><dd></dd>';
+        d.querySelector('dt').textContent = dt;
+        d.querySelector('dd').textContent = dd;
+        if (unit) { const sm = document.createElement('small'); sm.textContent = unit; d.querySelector('dd').append(sm); }
+        el.append(d);
+      }
+    }
+    function applyPreset(key, customName) {
+      preset = PRESETS[key];
+      const p = { ...preset };
+      if (key === 'custom' && customName) {
+        p.hTitle = customName; p.words = p.words.map((w, i) => (i === 0 || i === 6) ? customName.toUpperCase() : w);
+        p.brand = customName.toUpperCase().replace(/[<>&]/g, '');
+      }
+      for (const id of ['hEyebrow', 'hTitle', 'hLead', 'dTitle', 'dText', 'fTitle', 'fText', 'pTitle', 'pText', 'rTitle', 'rText', 'eTitle']) $(id).textContent = p[id];
+      $('eEyebrow').textContent = key === 'custom' ? (customName || 'Garaj 360') : p.label;
+      $('brand').innerHTML = p.brand;
+      fig($('dFig'), p.dFig); fig($('pFig'), p.pFig);
+      words = p.words;
+      $('backword').textContent = words[index];
+      document.querySelectorAll('#presets .chip').forEach(c => c.setAttribute('aria-pressed', c.dataset.key === key));
+      $('customName').hidden = key !== 'custom';
+    }
+    let words = PRESETS.malibu.words;
+
     const slides = [...document.querySelectorAll('.slide')];
     const track = document.getElementById('track');
     const dots = document.getElementById('dots');
@@ -315,9 +506,11 @@
       document.getElementById('hint').style.opacity = i === N - 1 ? 0 : 1;
       const word = document.getElementById('backword');
       word.style.opacity = 0;
-      setTimeout(() => { word.textContent = slides[i].dataset.word; word.style.opacity = 1; }, 380);
+      setTimeout(() => { word.textContent = words[i]; word.style.opacity = 1; }, 380);
       from.cam.copy(cur.cam); from.look.copy(cur.look); from.shift = cur.shift; from.lift = cur.lift;
       tween = 0;
+      document.body.classList.toggle('free', i === 5);
+      if (typeof sfPose === 'function') sfPose(i);
       // settle the car back to its pose (keep the 360° slide free)
       if (i !== 5) {
         userYaw += Math.atan2(Math.sin(spin), Math.cos(spin));
@@ -328,6 +521,7 @@
     // ---------------- input: wheel, keys, swipe, drag-to-rotate ----------------
     let wheelAcc = 0, wheelTimer;
     window.addEventListener('wheel', e => {
+      if (e.target.closest('.garage')) return;
       e.preventDefault();
       if (locked) return;
       wheelAcc += e.deltaY;
@@ -336,6 +530,7 @@
     }, { passive: false });
 
     window.addEventListener('keydown', e => {
+      if (e.target.closest('input, .garage')) { if (e.key === 'Escape') openGarage(false); return; }
       if (['ArrowDown', 'PageDown', ' '].includes(e.key)) { e.preventDefault(); if (!locked) go(index + 1); }
       if (['ArrowUp', 'PageUp'].includes(e.key)) { e.preventDefault(); if (!locked) go(index - 1); }
       if (e.key === 'ArrowLeft') yawVel -= 0.06;
@@ -346,7 +541,7 @@
 
     let start = null;
     window.addEventListener('pointerdown', e => {
-      if (e.target.closest('button, a')) return;
+      if (e.target.closest('button, a, input, label, .garage')) return;
       start = { x: e.clientX, y: e.clientY, lx: e.clientX, t: performance.now(), axis: null };
     });
     window.addEventListener('pointermove', e => {
@@ -376,6 +571,186 @@
       lightsBtn.setAttribute('aria-pressed', studio.lightsOn);
     };
 
+    // ---------------- garage: pick a car, upload any .glb ----------------
+    const garage = $('garage'), status = $('status');
+    function openGarage(on) {
+      garage.hidden = !on;
+      $('garageBtn').setAttribute('aria-expanded', on);
+    }
+    $('garageBtn').onclick = () => openGarage(garage.hidden);
+    $('garageClose').onclick = () => openGarage(false);
+    document.querySelectorAll('[data-open-garage]').forEach(b => b.onclick = () => openGarage(true));
+
+    let presetKey = 'malibu', modelLoaded = false;
+    for (const [key, p] of Object.entries(PRESETS)) {
+      const c = document.createElement('button');
+      c.className = 'chip'; c.dataset.key = key; c.textContent = p.label;
+      c.setAttribute('aria-pressed', key === presetKey);
+      c.onclick = () => {
+        presetKey = key;
+        applyPreset(key, $('nameInput').value.trim());
+        if (!modelLoaded && key !== 'malibu') {
+          setStatus(`${p.label} uchun matn tayyor. Endi shu mashinaning .glb faylini yuklang, hozircha namuna sifatida Malibu ko‘rinmoqda.`);
+        }
+        if (modelLoaded && p.length) fitTo(p.length);
+        if (SF_LINKS[key]) { $('sfInput').value = SF_LINKS[key]; sfOpen(SF_LINKS[key], p.label); }
+        else if (sf.ready || document.body.classList.contains('sf')) {
+          $('sfInput').value = '';
+          setStatus(`${p.label}: Sketchfab’da shu mashina modelini toping, havolasini yuqoriga qo‘ying va “Ochish”ni bosing. Yoki .glb faylini yuklang.`);
+        }
+      };
+      $('presets').append(c);
+    }
+    $('nameInput').addEventListener('input', () => applyPreset('custom', $('nameInput').value.trim()));
+
+    function setStatus(text, err = false) { status.textContent = text; status.classList.toggle('err', err); }
+    let lastFile = null;
+    function fitTo(length) {
+      if (!lastFile) return;
+      loadBuffer(lastFile.buffer, lastFile.name, length);
+    }
+    async function loadBuffer(buffer, name, length) {
+      setStatus(`“${name}” yuklanmoqda…`);
+      try {
+        const info = await studio.loadModel(buffer, { length: length || undefined, blackPaint: $('paintBtn').getAttribute('aria-pressed') === 'true' });
+        modelLoaded = true;
+        setCarSize(info.length, info.height);
+        from.cam.copy(cur.cam); from.look.copy(cur.look); tween = 0;
+        $('flipBtn').disabled = false; $('builtinBtn').disabled = false;
+        $('paintBtn').disabled = info.paintParts === 0;
+        $('lightsRow').hidden = true;
+        setStatus(`“${name}” yuklandi: ${info.length.toFixed(2)} m uzunlikda. Mashina orqasi bilan turgan bo‘lsa, “Old/orqani almashtirish”ni bosing.`
+          + (info.paintParts ? '' : ' Kuzov materiali topilmadi, shuning uchun rangini o‘zgartirib bo‘lmaydi.'));
+      } catch (err) {
+        console.error(err);
+        setStatus(/draco/i.test(String(err)) || /DRACO/.test(err?.message || '')
+          ? 'Bu fayl Draco bilan siqilgan va bu yerda ochilmadi. Sketchfab’dan oddiy glTF (.glb) variantini yuklang.'
+          : 'Faylni ochib bo‘lmadi. Bu .glb (glTF binary) fayl ekanini tekshiring.', true);
+      }
+    }
+    async function handleFile(file) {
+      if (!file) return;
+      if (!/\.glb$/i.test(file.name)) { setStatus('Faqat .glb fayl qabul qilinadi. Sketchfab: Download 3D Model → glTF (.glb).', true); openGarage(true); return; }
+      openGarage(true);
+      if (document.body.classList.contains('sf')) sfClose();
+      const buffer = await file.arrayBuffer();
+      lastFile = { buffer, name: file.name };
+      loadBuffer(buffer, file.name, PRESETS[presetKey].length);
+    }
+    $('fileInput').addEventListener('change', e => handleFile(e.target.files[0]));
+    let dragDepth = 0;
+    window.addEventListener('dragenter', e => { e.preventDefault(); dragDepth++; document.body.classList.add('dragging'); });
+    window.addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; document.body.classList.remove('dragging'); } });
+    window.addEventListener('dragover', e => e.preventDefault());
+    window.addEventListener('drop', e => {
+      e.preventDefault(); dragDepth = 0; document.body.classList.remove('dragging');
+      handleFile(e.dataTransfer.files[0]);
+    });
+    $('flipBtn').onclick = () => { if (sf.ready) { sf.flip = (sf.flip + 180) % 360; sfPose(index); } else studio.flipModel(); };
+    $('paintBtn').onclick = () => {
+      const on = $('paintBtn').getAttribute('aria-pressed') !== 'true';
+      $('paintBtn').setAttribute('aria-pressed', on);
+      if (sf.ready) sfPaintBlack(on); else studio.setBlackPaint(on);
+    };
+    $('builtinBtn').onclick = () => {
+      if (document.body.classList.contains('sf')) sfClose();
+      studio.useBuiltIn(); modelLoaded = false; lastFile = null;
+      setCarSize(4.923, 1.465);
+      $('flipBtn').disabled = $('paintBtn').disabled = $('builtinBtn').disabled = true;
+      $('lightsRow').hidden = false;
+      presetKey = 'malibu'; applyPreset('malibu');
+      setStatus('Hozir ichki Malibu 2 modeli ko‘rsatilmoqda.');
+    };
+
+    // ---------------- Sketchfab: real models, camera driven by the slides ----------------
+    // Relative camera moves from the model author's default view (Sketchfab is Z-up).
+    // az: turn around the car in degrees, el: tilt change, d: distance factor.
+    const SF_POSES = [
+      { az: 0, el: 0, d: 1.0 }, { az: 55, el: -6, d: 1.1 }, { az: -35, el: -2, d: 0.82 },
+      { az: 70, el: -10, d: 0.62 }, { az: 180, el: 0, d: 1.0 }, { az: 0, el: 0, d: 1.05 }, { az: -25, el: 4, d: 1.15 }
+    ];
+    // Sketchfab links: Malibu is the model you sent; the others open from a pasted link.
+    const SF_LINKS = { malibu: 'https://sketchfab.com/3d-models/2019-chevrolet-malibu-ls-sedan-c689df3e4b6a4df1b0b409309d00a728' };
+    const sf = { api: null, base: null, flip: 0, ready: false };
+    const sfUid = link => (String(link).match(/([0-9a-f]{32})/i) || [])[1];
+    function sfPose(i) {
+      if (!sf.ready) return;
+      const P = SF_POSES[i], b = sf.base;
+      const v = b.position.map((c, k) => c - b.target[k]);
+      const r = Math.hypot(...v);
+      const az = Math.atan2(v[1], v[0]) + (P.az + sf.flip) * Math.PI / 180;
+      const el = Math.max(0.03, Math.min(1.1, Math.asin(v[2] / r) + P.el * Math.PI / 180));
+      const R = r * P.d;
+      const pos = [b.target[0] + R * Math.cos(el) * Math.cos(az), b.target[1] + R * Math.cos(el) * Math.sin(az), b.target[2] + R * Math.sin(el)];
+      sf.api.setCameraLookAt(pos, b.target, reduced ? 0 : 1.4);
+    }
+    function sfOpen(link, label) {
+      const uid = sfUid(link);
+      if (!uid) { setStatus('Havolada model ID topilmadi. Sketchfab model sahifasining havolasini qo‘ying.', true); return; }
+      if (!window.Sketchfab) { setStatus('Sketchfab ko‘rsatgichi yuklanmadi (internet yoki sayt cheklovi). Ichki 3D model ko‘rsatilmoqda.', true); return; }
+      setStatus(`${label || 'Model'} Sketchfab’dan yuklanmoqda…`);
+      $('sfLayer').hidden = false;
+      document.body.classList.add('sf');
+      renderer.setAnimationLoop(null);
+      sf.ready = false;
+      const timer = setTimeout(() => { if (!sf.ready) sfFail('Sketchfab javob bermadi.'); }, 25000);
+      new window.Sketchfab('1.12.1', $('sfFrame')).init(uid, {
+        autostart: 1, preload: 1, camera: 0, transparent: 0,
+        ui_controls: 0, ui_infos: 0, ui_inspector: 0, ui_settings: 0, ui_help: 0, ui_vr: 0, ui_ar: 0,
+        ui_fullscreen: 0, ui_annotations: 0, ui_stop: 0, ui_hint: 0, ui_watermark_link: 0,
+        success: api => {
+          sf.api = api;
+          api.start();
+          api.addEventListener('viewerready', () => {
+            api.getCameraLookAt((err, cam) => {
+              clearTimeout(timer);
+              if (err) return sfFail('Kamera ma’lumotini olib bo‘lmadi.');
+              sf.base = cam; sf.ready = true;
+              sfPose(index);
+              $('flipBtn').disabled = false; $('builtinBtn').disabled = false; $('paintBtn').disabled = false;
+              $('lightsRow').hidden = true;
+              setStatus(`${label || 'Model'} ochildi (Sketchfab). Har bir svaypda kamera yangi burchakka o‘tadi; 360° bo‘limida modelni o‘zingiz aylantirasiz.`);
+            });
+          });
+        },
+        error: () => { clearTimeout(timer); sfFail('Bu modelni saytga joylab bo‘lmadi (muallif embed’ni yopgan bo‘lishi mumkin).'); }
+      });
+    }
+    function sfFail(msg) {
+      sfClose();
+      setStatus(msg + ' Ichki 3D model ko‘rsatilmoqda.', true);
+    }
+    function sfClose() {
+      sf.ready = false; sf.api = null;
+      $('sfFrame').src = 'about:blank';
+      $('sfLayer').hidden = true;
+      document.body.classList.remove('sf');
+      renderer.setAnimationLoop(loop);
+    }
+    // best effort: darken materials whose names look like body paint
+    function sfPaintBlack(on) {
+      if (!sf.ready) return;
+      sf.api.getMaterialList((err, mats) => {
+        if (err) return;
+        let n = 0;
+        for (const m of mats) {
+          if (!/paint|body|carpaint|exterior|lack|coat/i.test(m.name) || /glass|light|tire|rim|chrome|interior/i.test(m.name)) continue;
+          m._orig = m._orig || { a: m.channels.AlbedoPBR?.color?.slice(), d: m.channels.DiffuseColor?.color?.slice() };
+          const black = [0.015, 0.016, 0.018];
+          if (m.channels.AlbedoPBR?.color) m.channels.AlbedoPBR.color = on ? black : m._orig.a;
+          if (m.channels.DiffuseColor?.color) m.channels.DiffuseColor.color = on ? black : m._orig.d;
+          sf.api.setMaterial(m); n++;
+        }
+        if (!n) setStatus('Bu modelda kuzov materiali nomi topilmadi, rangni o‘zgartirib bo‘lmadi.', true);
+      });
+    }
+    $('sfForm').addEventListener('submit', e => {
+      e.preventDefault();
+      const link = $('sfInput').value.trim();
+      SF_LINKS[presetKey] = link;
+      sfOpen(link, PRESETS[presetKey].label);
+    });
+
     // ---------------- resize ----------------
     function resize() {
       const w = window.innerWidth, h = window.innerHeight;
@@ -390,17 +765,25 @@
 
     // ---------------- loop ----------------
     const PIVOT = new THREE.Vector3(0, 0.6, 0);
+    // poses were set for a 4.92 m x 1.47 m sedan; stretch them to the loaded car
+    let scale = new THREE.Vector2(1, 1), targetScale = new THREE.Vector2(1, 1);
+    function setCarSize(length, height) {
+      targetScale.set(length / 4.923, Math.max(0.85, Math.min(1.6, height / 1.465)));
+      PIVOT.y = 0.6 * targetScale.y;
+    }
     const ease = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
     const clock = new THREE.Clock();
     const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    renderer.setAnimationLoop(() => {
+    function loop() {
       const dt = Math.min(clock.getDelta(), 0.05);
       const P = POSES[index];
+      scale.lerp(targetScale, Math.min(1, dt * 3));
+      const S = v => new THREE.Vector3(v[0] * scale.x, v[1] * scale.y, v[2] * scale.x);
       tween = Math.min(1, tween + dt / (reduced ? 0.01 : 1.4));
       const k = ease(tween);
       // orbit between poses on a sphere around the car so the camera never passes through it
       const a = new THREE.Spherical().setFromVector3(from.cam.clone().sub(PIVOT));
-      const b = new THREE.Spherical().setFromVector3(new THREE.Vector3(...P.cam).sub(PIVOT));
+      const b = new THREE.Spherical().setFromVector3(S(P.cam).sub(PIVOT));
       let dTheta = b.theta - a.theta;
       dTheta = Math.atan2(Math.sin(dTheta), Math.cos(dTheta));
       const sph = new THREE.Spherical(
@@ -408,7 +791,7 @@
         THREE.MathUtils.lerp(a.phi, b.phi, k),
         a.theta + dTheta * k);
       cur.cam.setFromSpherical(sph).add(PIVOT);
-      cur.look.lerpVectors(from.look, new THREE.Vector3(...P.look), k);
+      cur.look.lerpVectors(from.look, S(P.look), k);
       cur.shift = THREE.MathUtils.lerp(from.shift, P.shift, k);
       cur.lift = THREE.MathUtils.lerp(from.lift, P.lift || 0, k);
 
@@ -429,10 +812,19 @@
       root.rotation.y = P.yaw + spin + userYaw;
 
       renderer.render(scene, camera);
-    });
+    }
+    renderer.setAnimationLoop(loop);
 
     go(0, true);
     tween = 1;
+    $('sfInput').value = SF_LINKS.malibu;
+    if (!params.has('local')) {
+      const t0 = performance.now();
+      (function waitViewer() {
+        if (window.Sketchfab) sfOpen(params.get('sketchfab') || SF_LINKS.malibu, PRESETS.malibu.label);
+        else if (performance.now() - t0 < 6000) setTimeout(waitViewer, 200);
+      })();
+    }
     const loader = document.getElementById('loader');
     loader.style.opacity = 0;
     setTimeout(() => loader.remove(), 800);

@@ -2,6 +2,7 @@
 // and an optional detailed .glb that replaces the built-in car (repainted black).
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 
 export function createMalibuStudio(renderer, opts = {}) {
     const root = new THREE.Group();   // everything that spins with the car
@@ -784,54 +785,99 @@ export function createMalibuStudio(renderer, opts = {}) {
     }
 
     // ------------------------------------------------------------------
-    // Optional detailed model: drop a .glb at assets/models/malibu.glb (or pass
-    // ?model=<url>) and it replaces the built-in car, repainted black.
+    // Any car as a .glb: loads from a URL or an uploaded file's ArrayBuffer,
+    // turns it so its long side runs along x, scales it to the real length,
+    // centres it and puts the wheels on the floor.
     // ------------------------------------------------------------------
-    // Material names treated as body paint. Add names here if the model uses others;
-    // every material name is printed to the console when the model loads.
-    const PAINT_NAMES = /paint|body|carpaint|car_paint|exterior|shell|metal_?flake/i;
-    const NOT_PAINT = /glass|window|light|lamp|tire|tyre|rubber|rim|wheel|chrome|interior|seat|plate|grill|badge|logo|mirror_glass|brake|caliper/i;
-    const modelUrl = opts.modelUrl || '../assets/models/malibu.glb';
-    new GLTFLoader().load(modelUrl, gltf => {
-      const model = gltf.scene;
+    // Material names treated as body paint by the "black paint" option;
+    // every material name is printed to the console when a model loads.
+    const PAINT_NAMES = /paint|body|carpaint|car_paint|exterior|shell|metal_?flake|lack|coat/i;
+    const NOT_PAINT = /glass|window|light|lamp|tire|tyre|rubber|rim|wheel|chrome|interior|seat|plate|grill|badge|logo|mirror_glass|brake|caliper|emblem|leather|carbon/i;
+    const gltfLoader = new GLTFLoader();
+    const draco = new DRACOLoader();
+    draco.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/draco/gltf/');
+    gltfLoader.setDRACOLoader(draco);
+    const paintSwaps = [];   // [mesh, originalMaterial, blackMaterial]
+    let modelInfo = { length: 4.923, height: 1.465 };
+
+    function fitModel(model, length) {
+      model.updateMatrixWorld(true);
+      let box = new THREE.Box3().setFromObject(model);
+      let size = box.getSize(new THREE.Vector3());
+      if (size.z > size.x) {
+        model.rotation.y = Math.PI / 2; model.updateMatrixWorld(true);
+        box = new THREE.Box3().setFromObject(model); size = box.getSize(new THREE.Vector3());
+      }
+      const k = (length || 4.9) / size.x;
+      model.scale.multiplyScalar(k); model.updateMatrixWorld(true);
+      box = new THREE.Box3().setFromObject(model);
+      const c = box.getCenter(new THREE.Vector3());
+      model.position.sub(new THREE.Vector3(c.x, box.min.y, c.z));
+      size = box.getSize(new THREE.Vector3());
+      return { length: size.x, height: size.y };
+    }
+
+    function prepare(model) {
+      paintSwaps.length = 0;
       const names = new Set();
       model.traverse(o => {
         if (!o.isMesh) return;
         o.castShadow = true; o.receiveShadow = true;
         const mats = Array.isArray(o.material) ? o.material : [o.material];
-        const out = mats.map(m => {
+        mats.forEach((m, idx) => {
           names.add(m.name);
+          if (m.envMapIntensity !== undefined) m.envMapIntensity = Math.max(m.envMapIntensity, 1.2);
           if (PAINT_NAMES.test(m.name) && !NOT_PAINT.test(m.name)) {
             const p = paint.clone();
             if (m.normalMap) p.normalMap = m.normalMap;
-            return p;
+            paintSwaps.push({ mesh: o, idx, original: m, black: p });
           }
-          if (m.envMapIntensity !== undefined) m.envMapIntensity = Math.max(m.envMapIntensity, 1.2);
-          return m;
         });
-        o.material = Array.isArray(o.material) ? out : out[0];
       });
-      console.info('[malibu] model materials:', [...names].join(', '));
+      console.info('[studio] model materials:', [...names].join(', '));
+    }
 
-      // Fit: longest horizontal side along x, real length 4.923 m, wheels on the floor
-      let box = new THREE.Box3().setFromObject(model);
-      let size = box.getSize(new THREE.Vector3());
-      if (size.z > size.x) { model.rotation.y = Math.PI / 2; box = new THREE.Box3().setFromObject(model); size = box.getSize(new THREE.Vector3()); }
-      const k = 4.923 / size.x;
-      model.scale.multiplyScalar(k);
-      box = new THREE.Box3().setFromObject(model);
-      const c = box.getCenter(new THREE.Vector3());
-      model.position.sub(new THREE.Vector3(c.x, box.min.y, c.z));
-      const holder = new THREE.Group();
-      holder.add(model);
-      root.add(holder);
+    function setBlackPaint(on) {
+      for (const s of paintSwaps) {
+        const mat = on ? s.black : s.original;
+        if (Array.isArray(s.mesh.material)) s.mesh.material[s.idx] = mat; else s.mesh.material = mat;
+      }
+    }
 
-      detailed = holder;
-      showDetailed(true);
-      if (opts.flip) holder.rotation.y = Math.PI;
-      opts.onModel?.(holder);
-    }, undefined, () => { /* no detailed model present: keep the built-in car */ });
+    // src: URL string or ArrayBuffer. Resolves with { length, height, paintParts }.
+    function loadModel(src, { length, blackPaint = false } = {}) {
+      return new Promise((resolve, reject) => {
+        const done = gltf => {
+          const model = gltf.scene;
+          prepare(model);
+          if (detailed) { root.remove(detailed); }
+          const holder = new THREE.Group();
+          holder.add(model);
+          modelInfo = fitModel(model, length);
+          root.add(holder);
+          detailed = holder;
+          setBlackPaint(blackPaint);
+          showDetailed(true);
+          resolve({ ...modelInfo, paintParts: paintSwaps.length, holder });
+        };
+        if (typeof src === 'string') gltfLoader.load(src, done, undefined, reject);
+        else gltfLoader.parse(src, '', done, reject);
+      });
+    }
+    function flipModel() { if (detailed) detailed.rotation.y += Math.PI; }
+    function useBuiltIn() {
+      if (detailed) { root.remove(detailed); detailed = null; }
+      car.visible = true;
+      modelInfo = { length: 4.923, height: 1.465 };
+    }
+
+    if (opts.autoload !== false) {
+      loadModel(opts.modelUrl || '../assets/models/malibu.glb', { length: 4.923, blackPaint: true })
+        .then(info => { if (opts.flip) flipModel(); opts.onModel?.(info.holder); })
+        .catch(() => { /* no detailed model present: keep the built-in car */ });
+    }
 
     return { scene, root, car, setLights, get lightsOn() { return lightsOn; }, showDetailed,
-             get hasDetailed() { return !!detailed; }, get detailedVisible() { return !!detailed && detailed.visible; } };
+             get hasDetailed() { return !!detailed; }, get detailedVisible() { return !!detailed && detailed.visible; },
+             loadModel, flipModel, useBuiltIn, setBlackPaint, get modelInfo() { return modelInfo; } };
 }
